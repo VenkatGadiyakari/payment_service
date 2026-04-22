@@ -1,0 +1,342 @@
+openapi: 3.0.3
+info:
+  title: Payment Service API
+  version: 1.0.0
+  description: |
+    Payment Service integrates with Stripe to handle secure payment processing for ticket purchases.
+    It creates checkout sessions, processes webhook events, and coordinates atomic inventory decrements.
+  contact:
+    name: Payment Service Team
+    email: support@ticketing.com
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: http://localhost:8080
+    description: Docker containerized server
+  - url: https://api-dev.ticketing.com
+    description: Development environment
+  - url: https://api-staging.ticketing.com
+    description: Staging environment
+  - url: https://api.ticketing.com
+    description: Production environment
+
+tags:
+  - name: Orders
+    description: Order creation and checkout session management
+  - name: Payments
+    description: Payment webhook processing
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  /api/orders:
+    post:
+      tags:
+        - Orders
+      summary: Create order and Stripe checkout session
+      description: |
+        Creates a new order and generates a Stripe checkout session URL for payment.
+        Validates tier status, inventory, and quantity limits before creating the order.
+      operationId: createOrder
+      parameters:
+        - name: X-Buyer-Id
+          in: header
+          description: Authenticated buyer's user ID
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: X-Trace-Id
+          in: header
+          description: Correlation ID for request tracking
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            examples:
+              validOrder:
+                summary: Valid order request
+                value:
+                  tierId: "550e8400-e29b-41d4-a716-446655440000"
+                  quantity: 2
+      responses:
+        '201':
+          description: Order created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateOrderResponse'
+              examples:
+                success:
+                  summary: Successful order creation
+                  value:
+                    orderId: "660e8400-e29b-41d4-a716-446655440001"
+                    stripeCheckoutUrl: "https://checkout.stripe.com/pay/cs_test_..."
+        '400':
+          description: Bad request - validation failure or insufficient inventory
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                insufficientInventory:
+                  summary: Insufficient inventory
+                  value:
+                    errorCode: "INSUFFICIENT_INVENTORY"
+                    message: "Insufficient inventory. Requested: 5, Available: 2"
+                    timestamp: "2026-04-21T10:30:00Z"
+                    traceId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                invalidTier:
+                  summary: Invalid tier status
+                  value:
+                    errorCode: "INVALID_TIER"
+                    message: "Tier is not active"
+                    timestamp: "2026-04-21T10:30:00Z"
+                    traceId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        '404':
+          description: Tier not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/payments/webhook:
+    post:
+      tags:
+        - Payments
+      summary: Process Stripe webhook events
+      description: |
+        Receives and processes Stripe webhook events for payment completion or failure.
+        Verifies webhook signature, handles idempotency, and coordinates atomic inventory decrements.
+      operationId: handleWebhook
+      parameters:
+        - name: Stripe-Signature
+          in: header
+          description: Stripe webhook signature for verification
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              description: Raw Stripe webhook event payload
+            examples:
+              paymentSuccess:
+                summary: Payment succeeded event
+                value:
+                  id: "evt_1234567890"
+                  type: "checkout.session.completed"
+                  data:
+                    object:
+                      id: "cs_test_..."
+                      payment_status: "paid"
+                      amount_total: 5000
+                      currency: "inr"
+                      metadata:
+                        orderId: "660e8400-e29b-41d4-a716-446655440001"
+              paymentFailed:
+                summary: Payment failed event
+                value:
+                  id: "evt_9876543210"
+                  type: "checkout.session.async_payment_failed"
+                  data:
+                    object:
+                      id: "cs_test_..."
+                      payment_status: "unpaid"
+                      amount_total: 5000
+                      currency: "inr"
+                      metadata:
+                        orderId: "660e8400-e29b-41d4-a716-446655440001"
+      responses:
+        '200':
+          description: Webhook processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookResponse'
+              examples:
+                success:
+                  summary: Webhook acknowledged
+                  value:
+                    received: true
+        '401':
+          description: Unauthorized - invalid webhook signature
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Conflict - duplicate event already processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health/ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness probe
+      description: Kubernetes readiness probe endpoint
+      operationId: readinessProbe
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                ready:
+                  summary: Service ready
+                  value:
+                    status: "UP"
+                    service: "payment-service"
+                    timestamp: "2026-04-21T10:30:00Z"
+
+  /health/live:
+    get:
+      tags:
+        - Health
+      summary: Liveness probe
+      description: Kubernetes liveness probe endpoint
+      operationId: livenessProbe
+      responses:
+        '200':
+          description: Service is alive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                alive:
+                  summary: Service alive
+                  value:
+                    status: "UP"
+                    service: "payment-service"
+                    timestamp: "2026-04-21T10:30:00Z"
+
+  /v1/payment/health:
+    get:
+      tags:
+        - Health
+      summary: Health check endpoint
+      description: General health check endpoint for monitoring
+      operationId: health
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              examples:
+                healthy:
+                  summary: Service healthy
+                  value:
+                    status: "UP"
+                    service: "payment-service"
+                    timestamp: "2026-04-21T10:30:00Z"
+
+components:
+  schemas:
+    CreateOrderRequest:
+      type: object
+      required:
+        - tierId
+        - quantity
+      properties:
+        tierId:
+          type: string
+          format: uuid
+          description: UUID of the ticket tier to purchase
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        quantity:
+          type: integer
+          minimum: 1
+          description: Number of tickets to purchase
+          example: 2
+
+    CreateOrderResponse:
+      type: object
+      properties:
+        orderId:
+          type: string
+          format: uuid
+          description: Unique identifier of the created order
+          example: "660e8400-e29b-41d4-a716-446655440001"
+        stripeCheckoutUrl:
+          type: string
+          format: uri
+          description: Stripe-hosted checkout page URL
+          example: "https://checkout.stripe.com/pay/cs_test_a1b2c3d4e5f6g7h8i9j0"
+
+    WebhookResponse:
+      type: object
+      properties:
+        received:
+          type: boolean
+          description: Acknowledgment that webhook was processed
+          example: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        errorCode:
+          type: string
+          description: Machine-readable error code
+          example: "INSUFFICIENT_INVENTORY"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Insufficient inventory. Requested: 5, Available: 2"
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of when the error occurred
+          example: "2026-04-21T10:30:00Z"
+        traceId:
+          type: string
+          description: Correlation ID for request tracking
+          example: "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          description: Health status of the service
+          enum:
+            - UP
+            - DOWN
+          example: "UP"
+        service:
+          type: string
+          description: Name of the service
+          example: "payment-service"
+        timestamp:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of the health check
+          example: "2026-04-21T10:30:00Z"
