@@ -9,5 +9,5 @@ import java.util.UUID;
 @Repository
 public interface PaymentEventRepository extends JpaRepository<PaymentEvent, UUID> {
 
-    boolean existsByStripeEventId(String stripeEventId);
+    boolean existsByRazorpayEventId(String razorpayEventId);
 }

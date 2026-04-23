@@ -21,14 +21,14 @@ class OrderTest {
     void testAllArgsConstructor() {
         UUID buyerId = UUID.randomUUID();
         BigDecimal totalAmount = BigDecimal.valueOf(500.00);
-        String stripeSessionId = "cs_test_123456";
+        String razorpayPaymentLinkId = "plink_test_123456";
 
-        Order order = new Order(buyerId, OrderStatus.CONFIRMED, totalAmount, stripeSessionId);
+        Order order = new Order(buyerId, OrderStatus.CONFIRMED, totalAmount, razorpayPaymentLinkId);
 
         assertEquals(buyerId, order.getBuyerId());
         assertEquals(OrderStatus.CONFIRMED, order.getStatus());
         assertEquals(totalAmount, order.getTotalAmount());
-        assertEquals(stripeSessionId, order.getStripeSessionId());
+        assertEquals(razorpayPaymentLinkId, order.getRazorpayPaymentLinkId());
     }
 
     @Test
@@ -37,19 +37,19 @@ class OrderTest {
         UUID id = UUID.randomUUID();
         UUID buyerId = UUID.randomUUID();
         BigDecimal totalAmount = BigDecimal.valueOf(750.50);
-        String stripeSessionId = "cs_test_789012";
+        String razorpayPaymentLinkId = "plink_test_789012";
 
         order.setId(id);
         order.setBuyerId(buyerId);
         order.setStatus(OrderStatus.FAILED);
         order.setTotalAmount(totalAmount);
-        order.setStripeSessionId(stripeSessionId);
+        order.setRazorpayPaymentLinkId(razorpayPaymentLinkId);
 
         assertEquals(id, order.getId());
         assertEquals(buyerId, order.getBuyerId());
         assertEquals(OrderStatus.FAILED, order.getStatus());
         assertEquals(totalAmount, order.getTotalAmount());
-        assertEquals(stripeSessionId, order.getStripeSessionId());
+        assertEquals(razorpayPaymentLinkId, order.getRazorpayPaymentLinkId());
     }
 
     @Test

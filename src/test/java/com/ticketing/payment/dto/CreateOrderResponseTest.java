@@ -17,25 +17,25 @@ class CreateOrderResponseTest {
     @Test
     void testAllArgsConstructor() {
         UUID orderId = UUID.randomUUID();
-        String url = "https://checkout.stripe.com/pay/cs_test_123";
+        String url = "https://rzp.io/l/test123";
 
         CreateOrderResponse response = new CreateOrderResponse(orderId, url);
 
         assertEquals(orderId, response.getOrderId());
-        assertEquals(url, response.getStripeCheckoutUrl());
+        assertEquals(url, response.getCheckoutUrl());
     }
 
     @Test
     void testSettersAndGetters() {
         CreateOrderResponse response = new CreateOrderResponse();
         UUID orderId = UUID.randomUUID();
-        String url = "https://checkout.stripe.com/pay/cs_test_456";
+        String url = "https://rzp.io/l/test456";
 
         response.setOrderId(orderId);
-        response.setStripeCheckoutUrl(url);
+        response.setCheckoutUrl(url);
 
         assertEquals(orderId, response.getOrderId());
-        assertEquals(url, response.getStripeCheckoutUrl());
+        assertEquals(url, response.getCheckoutUrl());
     }
 
     @Test
@@ -43,6 +43,6 @@ class CreateOrderResponseTest {
         CreateOrderResponse response = new CreateOrderResponse(null, null);
 
         assertNull(response.getOrderId());
-        assertNull(response.getStripeCheckoutUrl());
+        assertNull(response.getCheckoutUrl());
     }
 }

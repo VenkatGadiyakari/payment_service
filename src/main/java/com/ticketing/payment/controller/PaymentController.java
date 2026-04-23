@@ -19,7 +19,7 @@ public class PaymentController {
     @PostMapping("/webhook")
     public ResponseEntity<WebhookResponse> handleWebhook(
             @RequestBody String payload,
-            @RequestHeader("Stripe-Signature") String signatureHeader) {
+            @RequestHeader("X-Razorpay-Signature") String signatureHeader) {
 
         try {
             paymentService.processWebhook(payload, signatureHeader);

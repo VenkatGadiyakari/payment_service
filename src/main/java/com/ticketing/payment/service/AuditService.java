@@ -14,9 +14,9 @@ public class AuditService {
                     orderId, tierId, quantity);
     }
 
-    public void logCheckoutSessionCreated(String orderId, String sessionId) {
-        logger.info("AUDIT: Stripe checkout session created - orderId: {}, sessionId: {}",
-                    orderId, maskSensitiveData(sessionId));
+    public void logPaymentLinkCreated(String orderId, String paymentLinkId) {
+        logger.info("AUDIT: Razorpay payment link created - orderId: {}, paymentLinkId: {}",
+                    orderId, maskSensitiveData(paymentLinkId));
     }
 
     public void logWebhookReceived(String eventId, String eventType) {

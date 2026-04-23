@@ -21,24 +21,24 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final TicketTierRepository ticketTierRepository;
-    private final StripeService stripeService;
+    private final RazorpayService razorpayService;
     private final AuditService auditService;
 
-    @Value("${stripe.success-url}")
+    @Value("${razorpay.success-url}")
     private String successUrl;
 
-    @Value("${stripe.cancel-url}")
+    @Value("${razorpay.cancel-url}")
     private String cancelUrl;
 
     public OrderService(OrderRepository orderRepository,
                         OrderItemRepository orderItemRepository,
                         TicketTierRepository ticketTierRepository,
-                        StripeService stripeService,
+                        RazorpayService razorpayService,
                         AuditService auditService) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
         this.ticketTierRepository = ticketTierRepository;
-        this.stripeService = stripeService;
+        this.razorpayService = razorpayService;
         this.auditService = auditService;
     }
 
@@ -86,7 +86,7 @@ public class OrderService {
                 request.getQuantity(),
                 buyerId.toString());
 
-        String checkoutUrl = stripeService.createCheckoutSession(
+        String checkoutUrl = razorpayService.createPaymentLink(
                 order.getId(),
                 totalAmount,
                 tier.getName(),
@@ -94,10 +94,10 @@ public class OrderService {
                 successUrl,
                 cancelUrl);
 
-        order.setStripeSessionId(stripeService.extractSessionId(checkoutUrl));
+        order.setRazorpayPaymentLinkId(razorpayService.extractPaymentLinkId(checkoutUrl));
         orderRepository.save(order);
 
-        auditService.logCheckoutSessionCreated(order.getId().toString(), order.getStripeSessionId());
+        auditService.logPaymentLinkCreated(order.getId().toString(), order.getRazorpayPaymentLinkId());
 
         return new CreateOrderResponse(order.getId(), checkoutUrl);
     }

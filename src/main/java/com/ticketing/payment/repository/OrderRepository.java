@@ -10,5 +10,5 @@ import java.util.UUID;
 @Repository
 public interface OrderRepository extends JpaRepository<Order, UUID> {
 
-    Optional<Order> findByStripeSessionId(String stripeSessionId);
+    Optional<Order> findByRazorpayPaymentLinkId(String razorpayPaymentLinkId);
 }

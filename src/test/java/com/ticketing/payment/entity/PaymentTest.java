@@ -21,14 +21,14 @@ class PaymentTest {
     @Test
     void testAllArgsConstructor() {
         UUID orderId = UUID.randomUUID();
-        String stripePaymentId = "pi_123456";
+        String razorpayPaymentId = "pay_123456";
         BigDecimal amount = BigDecimal.valueOf(100.50);
-        String currency = "USD";
+        String currency = "INR";
 
-        Payment payment = new Payment(orderId, stripePaymentId, amount, currency, PaymentStatus.SUCCEEDED);
+        Payment payment = new Payment(orderId, razorpayPaymentId, amount, currency, PaymentStatus.SUCCEEDED);
 
         assertEquals(orderId, payment.getOrderId());
-        assertEquals(stripePaymentId, payment.getStripePaymentId());
+        assertEquals(razorpayPaymentId, payment.getRazorpayPaymentId());
         assertEquals(amount, payment.getAmount());
         assertEquals(currency, payment.getCurrency());
         assertEquals(PaymentStatus.SUCCEEDED, payment.getStatus());
@@ -39,21 +39,21 @@ class PaymentTest {
         Payment payment = new Payment();
         UUID id = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
-        String stripePaymentId = "pi_789012";
+        String razorpayPaymentId = "pay_789012";
         BigDecimal amount = BigDecimal.valueOf(250.75);
 
         payment.setId(id);
         payment.setOrderId(orderId);
-        payment.setStripePaymentId(stripePaymentId);
+        payment.setRazorpayPaymentId(razorpayPaymentId);
         payment.setAmount(amount);
-        payment.setCurrency("EUR");
+        payment.setCurrency("INR");
         payment.setStatus(PaymentStatus.FAILED);
 
         assertEquals(id, payment.getId());
         assertEquals(orderId, payment.getOrderId());
-        assertEquals(stripePaymentId, payment.getStripePaymentId());
+        assertEquals(razorpayPaymentId, payment.getRazorpayPaymentId());
         assertEquals(amount, payment.getAmount());
-        assertEquals("EUR", payment.getCurrency());
+        assertEquals("INR", payment.getCurrency());
         assertEquals(PaymentStatus.FAILED, payment.getStatus());
     }
 

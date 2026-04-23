@@ -1,10 +1,9 @@
 package com.ticketing.payment.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.stripe.exception.SignatureVerificationException;
-import com.stripe.model.Event;
-import com.stripe.model.checkout.Session;
-import com.stripe.net.Webhook;
+import com.razorpay.RazorpayException;
+import com.razorpay.Utils;
 import com.ticketing.payment.entity.*;
 import com.ticketing.payment.exception.DuplicateEventException;
 import com.ticketing.payment.exception.InvalidWebhookSignatureException;
@@ -34,7 +33,7 @@ public class PaymentService {
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
 
-    @Value("${stripe.webhook-secret}")
+    @Value("${razorpay.webhook.secret}")
     private String webhookSecret;
 
     public PaymentService(PaymentRepository paymentRepository,
@@ -55,45 +54,56 @@ public class PaymentService {
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void processWebhook(String payload, String signatureHeader) {
-        Event event = verifyWebhookSignature(payload, signatureHeader);
+        verifyWebhookSignature(payload, signatureHeader);
 
-        auditService.logWebhookReceived(event.getId(), event.getType());
-
-        if (paymentEventRepository.existsByStripeEventId(event.getId())) {
-            auditService.logDuplicateWebhook(event.getId());
-            throw new DuplicateEventException("Event already processed: " + event.getId());
-        }
-
-        String eventType = event.getType();
-
-        if ("checkout.session.completed".equals(eventType)) {
-            handlePaymentSuccess(event, payload);
-        } else if ("checkout.session.async_payment_failed".equals(eventType)) {
-            handlePaymentFailure(event, payload);
-        }
-    }
-
-    private Event verifyWebhookSignature(String payload, String signatureHeader) {
+        JsonNode root;
         try {
-            return Webhook.constructEvent(payload, signatureHeader, webhookSecret);
-        } catch (SignatureVerificationException e) {
-            auditService.logWebhookSignatureFailure(e.getMessage());
-            throw new InvalidWebhookSignatureException("Invalid webhook signature: " + e.getMessage());
+            root = objectMapper.readTree(payload);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse webhook payload", e);
+        }
+
+        String eventType = root.path("event").asText();
+        String razorpayPaymentId = root.path("payload").path("payment").path("entity").path("id").asText("");
+
+        auditService.logWebhookReceived(razorpayPaymentId, eventType);
+
+        if (paymentEventRepository.existsByRazorpayEventId(razorpayPaymentId)) {
+            auditService.logDuplicateWebhook(razorpayPaymentId);
+            throw new DuplicateEventException("Event already processed: " + razorpayPaymentId);
+        }
+
+        if ("payment_link.paid".equals(eventType)) {
+            handlePaymentSuccess(root, razorpayPaymentId, payload, eventType);
+        } else if ("payment.failed".equals(eventType)) {
+            handlePaymentFailure(root, razorpayPaymentId, payload, eventType);
         }
     }
 
-    private void handlePaymentSuccess(Event event, String rawPayload) {
-        Session session = extractSessionFromEvent(event);
-        UUID orderId = UUID.fromString(session.getMetadata().get("orderId"));
+    private void verifyWebhookSignature(String payload, String signatureHeader) {
+        try {
+            boolean valid = Utils.verifyWebhookSignature(payload, signatureHeader, webhookSecret);
+            if (!valid) {
+                auditService.logWebhookSignatureFailure("Signature mismatch");
+                throw new InvalidWebhookSignatureException("Invalid webhook signature");
+            }
+        } catch (RazorpayException e) {
+            auditService.logWebhookSignatureFailure(e.getMessage());
+            throw new InvalidWebhookSignatureException("Webhook signature verification failed: " + e.getMessage());
+        }
+    }
+
+    private void handlePaymentSuccess(JsonNode root, String razorpayPaymentId, String rawPayload, String eventType) {
+        JsonNode paymentEntity = root.path("payload").path("payment").path("entity");
+        JsonNode notes = paymentEntity.path("notes");
+
+        UUID orderId = UUID.fromString(notes.path("orderId").asText());
 
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found: " + orderId));
 
         if (order.getStatus() != OrderStatus.PENDING) {
-            auditService.logOrderStatusUpdated(
-                    orderId.toString(),
-                    order.getStatus().name(),
-                    order.getStatus().name());
+            auditService.logOrderStatusUpdated(orderId.toString(), order.getStatus().name(), order.getStatus().name());
             return;
         }
 
@@ -105,15 +115,16 @@ public class PaymentService {
         OrderItem orderItem = orderItems.get(0);
         int rowsUpdated = ticketTierRepository.decrementInventory(orderItem.getTierId(), orderItem.getQuantity());
 
-        BigDecimal amount = BigDecimal.valueOf(session.getAmountTotal()).divide(BigDecimal.valueOf(100));
-        String paymentIntentId = session.getPaymentIntent() != null ? session.getPaymentIntent() : session.getId();
+        long amountInPaise = paymentEntity.path("amount").asLong(0);
+        BigDecimal amount = BigDecimal.valueOf(amountInPaise).divide(BigDecimal.valueOf(100));
+        String currency = paymentEntity.path("currency").asText("INR").toUpperCase();
 
         if (rowsUpdated == 1) {
             Payment payment = new Payment();
             payment.setOrderId(orderId);
-            payment.setStripePaymentId(paymentIntentId);
+            payment.setRazorpayPaymentId(razorpayPaymentId);
             payment.setAmount(amount);
-            payment.setCurrency(session.getCurrency() != null ? session.getCurrency().toUpperCase() : "INR");
+            payment.setCurrency(currency);
             payment.setStatus(PaymentStatus.SUCCEEDED);
             payment = paymentRepository.save(payment);
 
@@ -122,8 +133,8 @@ public class PaymentService {
 
             PaymentEvent paymentEvent = new PaymentEvent();
             paymentEvent.setPaymentId(payment.getId());
-            paymentEvent.setStripeEventId(event.getId());
-            paymentEvent.setEventType(event.getType());
+            paymentEvent.setRazorpayEventId(razorpayPaymentId);
+            paymentEvent.setEventType(eventType);
             paymentEvent.setPayload(rawPayload);
             paymentEventRepository.save(paymentEvent);
 
@@ -135,9 +146,9 @@ public class PaymentService {
 
             Payment payment = new Payment();
             payment.setOrderId(orderId);
-            payment.setStripePaymentId(paymentIntentId);
+            payment.setRazorpayPaymentId(razorpayPaymentId);
             payment.setAmount(amount);
-            payment.setCurrency(session.getCurrency() != null ? session.getCurrency().toUpperCase() : "INR");
+            payment.setCurrency(currency);
             payment.setStatus(PaymentStatus.FAILED);
             payment = paymentRepository.save(payment);
 
@@ -146,8 +157,8 @@ public class PaymentService {
 
             PaymentEvent paymentEvent = new PaymentEvent();
             paymentEvent.setPaymentId(payment.getId());
-            paymentEvent.setStripeEventId(event.getId());
-            paymentEvent.setEventType(event.getType());
+            paymentEvent.setRazorpayEventId(razorpayPaymentId);
+            paymentEvent.setEventType(eventType);
             paymentEvent.setPayload(rawPayload);
             paymentEventRepository.save(paymentEvent);
 
@@ -156,9 +167,11 @@ public class PaymentService {
         }
     }
 
-    private void handlePaymentFailure(Event event, String rawPayload) {
-        Session session = extractSessionFromEvent(event);
-        UUID orderId = UUID.fromString(session.getMetadata().get("orderId"));
+    private void handlePaymentFailure(JsonNode root, String razorpayPaymentId, String rawPayload, String eventType) {
+        JsonNode paymentEntity = root.path("payload").path("payment").path("entity");
+        JsonNode notes = paymentEntity.path("notes");
+
+        UUID orderId = UUID.fromString(notes.path("orderId").asText());
 
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new OrderNotFoundException("Order not found: " + orderId));
@@ -167,14 +180,16 @@ public class PaymentService {
             return;
         }
 
-        BigDecimal amount = BigDecimal.valueOf(session.getAmountTotal()).divide(BigDecimal.valueOf(100));
-        String paymentIntentId = session.getPaymentIntent() != null ? session.getPaymentIntent() : session.getId();
+        long amountInPaise = paymentEntity.path("amount").asLong(0);
+        BigDecimal amount = BigDecimal.valueOf(amountInPaise).divide(BigDecimal.valueOf(100));
+        String currency = paymentEntity.path("currency").asText("INR").toUpperCase();
+        String errorDescription = paymentEntity.path("error_description").asText("Unknown error");
 
         Payment payment = new Payment();
         payment.setOrderId(orderId);
-        payment.setStripePaymentId(paymentIntentId);
+        payment.setRazorpayPaymentId(razorpayPaymentId);
         payment.setAmount(amount);
-        payment.setCurrency(session.getCurrency() != null ? session.getCurrency().toUpperCase() : "INR");
+        payment.setCurrency(currency);
         payment.setStatus(PaymentStatus.FAILED);
         payment = paymentRepository.save(payment);
 
@@ -183,20 +198,12 @@ public class PaymentService {
 
         PaymentEvent paymentEvent = new PaymentEvent();
         paymentEvent.setPaymentId(payment.getId());
-        paymentEvent.setStripeEventId(event.getId());
-        paymentEvent.setEventType(event.getType());
+        paymentEvent.setRazorpayEventId(razorpayPaymentId);
+        paymentEvent.setEventType(eventType);
         paymentEvent.setPayload(rawPayload);
         paymentEventRepository.save(paymentEvent);
 
-        auditService.logPaymentFailed(orderId.toString(), "Payment failed: " + session.getPaymentStatus());
+        auditService.logPaymentFailed(orderId.toString(), "Payment failed: " + errorDescription);
         auditService.logOrderStatusUpdated(orderId.toString(), OrderStatus.PENDING.name(), OrderStatus.FAILED.name());
-    }
-
-    private Session extractSessionFromEvent(Event event) {
-        try {
-            return objectMapper.convertValue(event.getDataObjectDeserializer().getObject().orElseThrow(), Session.class);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to extract session from event", e);
-        }
     }
 }

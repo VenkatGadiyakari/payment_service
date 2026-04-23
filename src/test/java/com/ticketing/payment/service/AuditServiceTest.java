@@ -22,13 +22,6 @@ class AuditServiceTest {
     }
 
     @Test
-    void testLogCheckoutSessionCreated() {
-        assertDoesNotThrow(() ->
-                auditService.logCheckoutSessionCreated("order-123", "cs_test_123456")
-        );
-    }
-
-    @Test
     void testLogWebhookReceived() {
         assertDoesNotThrow(() ->
                 auditService.logWebhookReceived("evt_123456", "checkout.session.completed")
@@ -88,7 +81,6 @@ class AuditServiceTest {
     void testAllMethodsWithNullValues() {
         assertDoesNotThrow(() -> {
             auditService.logOrderCreated(null, null, null, null);
-            auditService.logCheckoutSessionCreated(null, null);
             auditService.logWebhookReceived(null, null);
             auditService.logPaymentSuccess(null, null, null);
             auditService.logPaymentFailed(null, null);

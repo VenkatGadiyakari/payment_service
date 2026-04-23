@@ -5,14 +5,14 @@ import java.util.UUID;
 public class CreateOrderResponse {
 
     private UUID orderId;
-    private String stripeCheckoutUrl;
+    private String checkoutUrl;
 
     public CreateOrderResponse() {
     }
 
-    public CreateOrderResponse(UUID orderId, String stripeCheckoutUrl) {
+    public CreateOrderResponse(UUID orderId, String checkoutUrl) {
         this.orderId = orderId;
-        this.stripeCheckoutUrl = stripeCheckoutUrl;
+        this.checkoutUrl = checkoutUrl;
     }
 
     public UUID getOrderId() {
@@ -23,11 +23,11 @@ public class CreateOrderResponse {
         this.orderId = orderId;
     }
 
-    public String getStripeCheckoutUrl() {
-        return stripeCheckoutUrl;
+    public String getCheckoutUrl() {
+        return checkoutUrl;
     }
 
-    public void setStripeCheckoutUrl(String stripeCheckoutUrl) {
-        this.stripeCheckoutUrl = stripeCheckoutUrl;
+    public void setCheckoutUrl(String checkoutUrl) {
+        this.checkoutUrl = checkoutUrl;
     }
 }

@@ -23,7 +23,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <stripe.version>24.3.0</stripe.version>
+        <razorpay.version>1.4.3</razorpay.version>
         <flyway.version>10.10.0</flyway.version>
     </properties>
 
@@ -68,11 +68,11 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Stripe -->
+        <!-- Razorpay SDK -->
         <dependency>
-            <groupId>com.stripe</groupId>
-            <artifactId>stripe-java</artifactId>
-            <version>${stripe.version}</version>
+            <groupId>com.razorpay</groupId>
+            <artifactId>razorpay-java</artifactId>
+            <version>${razorpay.version}</version>
         </dependency>
 
         <!-- JSON Processing -->

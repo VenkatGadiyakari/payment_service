@@ -18,14 +18,14 @@ class PaymentEventTest {
     @Test
     void testAllArgsConstructor() {
         UUID paymentId = UUID.randomUUID();
-        String stripeEventId = "evt_123456";
-        String eventType = "checkout.session.completed";
-        String payload = "{\"id\":\"evt_123456\"}";
+        String razorpayEventId = "pay_123456";
+        String eventType = "payment_link.paid";
+        String payload = "{\"event\":\"payment_link.paid\"}";
 
-        PaymentEvent event = new PaymentEvent(paymentId, stripeEventId, eventType, payload);
+        PaymentEvent event = new PaymentEvent(paymentId, razorpayEventId, eventType, payload);
 
         assertEquals(paymentId, event.getPaymentId());
-        assertEquals(stripeEventId, event.getStripeEventId());
+        assertEquals(razorpayEventId, event.getRazorpayEventId());
         assertEquals(eventType, event.getEventType());
         assertEquals(payload, event.getPayload());
     }
@@ -35,21 +35,21 @@ class PaymentEventTest {
         PaymentEvent event = new PaymentEvent();
         UUID id = UUID.randomUUID();
         UUID paymentId = UUID.randomUUID();
-        String stripeEventId = "evt_789012";
-        String eventType = "checkout.session.async_payment_failed";
-        String payload = "{\"id\":\"evt_789012\",\"type\":\"payment.failed\"}";
+        String razorpayEventId = "pay_789012";
+        String eventType = "payment.failed";
+        String payload = "{\"event\":\"payment.failed\"}";
         Instant processedAt = Instant.now();
 
         event.setId(id);
         event.setPaymentId(paymentId);
-        event.setStripeEventId(stripeEventId);
+        event.setRazorpayEventId(razorpayEventId);
         event.setEventType(eventType);
         event.setPayload(payload);
         event.setProcessedAt(processedAt);
 
         assertEquals(id, event.getId());
         assertEquals(paymentId, event.getPaymentId());
-        assertEquals(stripeEventId, event.getStripeEventId());
+        assertEquals(razorpayEventId, event.getRazorpayEventId());
         assertEquals(eventType, event.getEventType());
         assertEquals(payload, event.getPayload());
         assertEquals(processedAt, event.getProcessedAt());

@@ -18,8 +18,8 @@ public class PaymentEvent {
     @Column(name = "payment_id", nullable = false)
     private UUID paymentId;
 
-    @Column(name = "stripe_event_id", nullable = false, unique = true, length = 255)
-    private String stripeEventId;
+    @Column(name = "razorpay_event_id", nullable = false, unique = true, length = 255)
+    private String razorpayEventId;
 
     @Column(name = "event_type", nullable = false, length = 100)
     private String eventType;
@@ -41,9 +41,9 @@ public class PaymentEvent {
     public PaymentEvent() {
     }
 
-    public PaymentEvent(UUID paymentId, String stripeEventId, String eventType, String payload) {
+    public PaymentEvent(UUID paymentId, String razorpayEventId, String eventType, String payload) {
         this.paymentId = paymentId;
-        this.stripeEventId = stripeEventId;
+        this.razorpayEventId = razorpayEventId;
         this.eventType = eventType;
         this.payload = payload;
     }
@@ -64,12 +64,12 @@ public class PaymentEvent {
         this.paymentId = paymentId;
     }
 
-    public String getStripeEventId() {
-        return stripeEventId;
+    public String getRazorpayEventId() {
+        return razorpayEventId;
     }
 
-    public void setStripeEventId(String stripeEventId) {
-        this.stripeEventId = stripeEventId;
+    public void setRazorpayEventId(String razorpayEventId) {
+        this.razorpayEventId = razorpayEventId;
     }
 
     public String getEventType() {

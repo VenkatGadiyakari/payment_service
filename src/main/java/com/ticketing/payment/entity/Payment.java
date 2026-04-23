@@ -16,8 +16,8 @@ public class Payment {
     @Column(name = "order_id", nullable = false, unique = true)
     private UUID orderId;
 
-    @Column(name = "stripe_payment_id", nullable = false, unique = true, length = 255)
-    private String stripePaymentId;
+    @Column(name = "razorpay_payment_id", nullable = false, unique = true, length = 255)
+    private String razorpayPaymentId;
 
     @Column(name = "amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal amount;
@@ -49,9 +49,9 @@ public class Payment {
     public Payment() {
     }
 
-    public Payment(UUID orderId, String stripePaymentId, BigDecimal amount, String currency, PaymentStatus status) {
+    public Payment(UUID orderId, String razorpayPaymentId, BigDecimal amount, String currency, PaymentStatus status) {
         this.orderId = orderId;
-        this.stripePaymentId = stripePaymentId;
+        this.razorpayPaymentId = razorpayPaymentId;
         this.amount = amount;
         this.currency = currency;
         this.status = status;
@@ -73,12 +73,12 @@ public class Payment {
         this.orderId = orderId;
     }
 
-    public String getStripePaymentId() {
-        return stripePaymentId;
+    public String getRazorpayPaymentId() {
+        return razorpayPaymentId;
     }
 
-    public void setStripePaymentId(String stripePaymentId) {
-        this.stripePaymentId = stripePaymentId;
+    public void setRazorpayPaymentId(String razorpayPaymentId) {
+        this.razorpayPaymentId = razorpayPaymentId;
     }
 
     public BigDecimal getAmount() {
