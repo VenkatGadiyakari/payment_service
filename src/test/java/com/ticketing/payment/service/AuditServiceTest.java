@@ -24,14 +24,14 @@ class AuditServiceTest {
     @Test
     void testLogWebhookReceived() {
         assertDoesNotThrow(() ->
-                auditService.logWebhookReceived("evt_123456", "checkout.session.completed")
+                auditService.logWebhookReceived("pay_123456", "payment.captured")
         );
     }
 
     @Test
     void testLogPaymentSuccess() {
         assertDoesNotThrow(() ->
-                auditService.logPaymentSuccess("order-123", "pi_123456", "250.50")
+                auditService.logPaymentSuccess("order-123", "pay_123456", "250.50")
         );
     }
 
@@ -66,7 +66,7 @@ class AuditServiceTest {
     @Test
     void testLogDuplicateWebhook() {
         assertDoesNotThrow(() ->
-                auditService.logDuplicateWebhook("evt_123456")
+                auditService.logDuplicateWebhook("pay_123456")
         );
     }
 

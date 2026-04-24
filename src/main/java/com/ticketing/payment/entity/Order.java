@@ -10,7 +10,6 @@ import java.util.UUID;
 public class Order {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
     @Column(name = "buyer_id", nullable = false)
@@ -23,34 +22,13 @@ public class Order {
     @Column(name = "total_amount", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalAmount;
 
-    @Column(name = "razorpay_payment_link_id", length = 255)
-    private String razorpayPaymentLinkId;
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = Instant.now();
-        updatedAt = Instant.now();
-    }
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = Instant.now();
-    }
-
     public Order() {
-    }
-
-    public Order(UUID buyerId, OrderStatus status, BigDecimal totalAmount, String razorpayPaymentLinkId) {
-        this.buyerId = buyerId;
-        this.status = status;
-        this.totalAmount = totalAmount;
-        this.razorpayPaymentLinkId = razorpayPaymentLinkId;
     }
 
     public UUID getId() {
@@ -83,14 +61,6 @@ public class Order {
 
     public void setTotalAmount(BigDecimal totalAmount) {
         this.totalAmount = totalAmount;
-    }
-
-    public String getRazorpayPaymentLinkId() {
-        return razorpayPaymentLinkId;
-    }
-
-    public void setRazorpayPaymentLinkId(String razorpayPaymentLinkId) {
-        this.razorpayPaymentLinkId = razorpayPaymentLinkId;
     }
 
     public Instant getCreatedAt() {

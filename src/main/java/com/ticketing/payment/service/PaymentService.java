@@ -2,24 +2,21 @@ package com.ticketing.payment.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.razorpay.RazorpayException;
-import com.razorpay.Utils;
+import com.ticketing.payment.client.OrderServiceClient;
+import com.ticketing.payment.dto.CreatePaymentOrderRequest;
+import com.ticketing.payment.dto.CreatePaymentOrderResponse;
 import com.ticketing.payment.entity.*;
 import com.ticketing.payment.exception.DuplicateEventException;
 import com.ticketing.payment.exception.InvalidWebhookSignatureException;
 import com.ticketing.payment.exception.OrderNotFoundException;
-import com.ticketing.payment.repository.OrderItemRepository;
 import com.ticketing.payment.repository.OrderRepository;
 import com.ticketing.payment.repository.PaymentEventRepository;
 import com.ticketing.payment.repository.PaymentRepository;
-import com.ticketing.payment.repository.TicketTierRepository;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -28,33 +25,57 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final PaymentEventRepository paymentEventRepository;
     private final OrderRepository orderRepository;
-    private final OrderItemRepository orderItemRepository;
-    private final TicketTierRepository ticketTierRepository;
+    private final RazorpayService razorpayService;
+    private final OrderServiceClient orderServiceClient;
     private final AuditService auditService;
     private final ObjectMapper objectMapper;
-
-    @Value("${razorpay.webhook.secret}")
-    private String webhookSecret;
 
     public PaymentService(PaymentRepository paymentRepository,
                           PaymentEventRepository paymentEventRepository,
                           OrderRepository orderRepository,
-                          OrderItemRepository orderItemRepository,
-                          TicketTierRepository ticketTierRepository,
+                          RazorpayService razorpayService,
+                          OrderServiceClient orderServiceClient,
                           AuditService auditService,
                           ObjectMapper objectMapper) {
         this.paymentRepository = paymentRepository;
         this.paymentEventRepository = paymentEventRepository;
         this.orderRepository = orderRepository;
-        this.orderItemRepository = orderItemRepository;
-        this.ticketTierRepository = ticketTierRepository;
+        this.razorpayService = razorpayService;
+        this.orderServiceClient = orderServiceClient;
         this.auditService = auditService;
         this.objectMapper = objectMapper;
     }
 
+    @Transactional
+    public CreatePaymentOrderResponse createRazorpayOrder(UUID orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new OrderNotFoundException("Order not found: " + orderId));
+
+        if (order.getStatus() != OrderStatus.PENDING) {
+            throw new IllegalStateException("Order is not in PENDING status: " + order.getStatus());
+        }
+
+        long amountInPaise = order.getTotalAmount().multiply(BigDecimal.valueOf(100)).longValue();
+        String razorpayOrderId = razorpayService.createOrder(orderId, amountInPaise);
+
+        auditService.logOrderStatusUpdated(orderId.toString(), OrderStatus.PENDING.name(), "RAZORPAY_ORDER_CREATED");
+
+        return new CreatePaymentOrderResponse(
+                razorpayOrderId,
+                amountInPaise,
+                "INR",
+                razorpayService.getKeyId()
+        );
+    }
+
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void processWebhook(String payload, String signatureHeader) {
-        verifyWebhookSignature(payload, signatureHeader);
+        try {
+            razorpayService.verifyWebhookSignature(payload, signatureHeader);
+        } catch (RuntimeException e) {
+            auditService.logWebhookSignatureFailure(e.getMessage());
+            throw new InvalidWebhookSignatureException("Webhook signature verification failed: " + e.getMessage());
+        }
 
         JsonNode root;
         try {
@@ -73,23 +94,10 @@ public class PaymentService {
             throw new DuplicateEventException("Event already processed: " + razorpayPaymentId);
         }
 
-        if ("payment_link.paid".equals(eventType)) {
+        if ("payment.captured".equals(eventType)) {
             handlePaymentSuccess(root, razorpayPaymentId, payload, eventType);
         } else if ("payment.failed".equals(eventType)) {
             handlePaymentFailure(root, razorpayPaymentId, payload, eventType);
-        }
-    }
-
-    private void verifyWebhookSignature(String payload, String signatureHeader) {
-        try {
-            boolean valid = Utils.verifyWebhookSignature(payload, signatureHeader, webhookSecret);
-            if (!valid) {
-                auditService.logWebhookSignatureFailure("Signature mismatch");
-                throw new InvalidWebhookSignatureException("Invalid webhook signature");
-            }
-        } catch (RazorpayException e) {
-            auditService.logWebhookSignatureFailure(e.getMessage());
-            throw new InvalidWebhookSignatureException("Webhook signature verification failed: " + e.getMessage());
         }
     }
 
@@ -97,104 +105,65 @@ public class PaymentService {
         JsonNode paymentEntity = root.path("payload").path("payment").path("entity");
         JsonNode notes = paymentEntity.path("notes");
 
-        UUID orderId = UUID.fromString(notes.path("orderId").asText());
-
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new OrderNotFoundException("Order not found: " + orderId));
-
-        if (order.getStatus() != OrderStatus.PENDING) {
-            auditService.logOrderStatusUpdated(orderId.toString(), order.getStatus().name(), order.getStatus().name());
-            return;
+        String orderIdStr = notes.path("orderId").asText("");
+        if (orderIdStr.isEmpty()) {
+            throw new RuntimeException("Missing orderId in webhook notes");
         }
+        UUID orderId = UUID.fromString(orderIdStr);
 
-        List<OrderItem> orderItems = orderItemRepository.findByOrderId(orderId);
-        if (orderItems.isEmpty()) {
-            throw new OrderNotFoundException("Order items not found for order: " + orderId);
-        }
-
-        OrderItem orderItem = orderItems.get(0);
-        int rowsUpdated = ticketTierRepository.decrementInventory(orderItem.getTierId(), orderItem.getQuantity());
-
+        String razorpayOrderId = paymentEntity.path("order_id").asText("");
         long amountInPaise = paymentEntity.path("amount").asLong(0);
         BigDecimal amount = BigDecimal.valueOf(amountInPaise).divide(BigDecimal.valueOf(100));
         String currency = paymentEntity.path("currency").asText("INR").toUpperCase();
 
-        if (rowsUpdated == 1) {
-            Payment payment = new Payment();
-            payment.setOrderId(orderId);
-            payment.setRazorpayPaymentId(razorpayPaymentId);
-            payment.setAmount(amount);
-            payment.setCurrency(currency);
-            payment.setStatus(PaymentStatus.SUCCEEDED);
-            payment = paymentRepository.save(payment);
+        orderServiceClient.confirmOrder(orderId, razorpayPaymentId);
 
-            order.setStatus(OrderStatus.CONFIRMED);
-            orderRepository.save(order);
+        Payment payment = new Payment();
+        payment.setOrderId(orderId);
+        payment.setRazorpayPaymentId(razorpayPaymentId);
+        payment.setRazorpayOrderId(razorpayOrderId);
+        payment.setAmount(amount);
+        payment.setCurrency(currency);
+        payment.setStatus(PaymentStatus.SUCCEEDED);
+        payment = paymentRepository.save(payment);
 
-            PaymentEvent paymentEvent = new PaymentEvent();
-            paymentEvent.setPaymentId(payment.getId());
-            paymentEvent.setRazorpayEventId(razorpayPaymentId);
-            paymentEvent.setEventType(eventType);
-            paymentEvent.setPayload(rawPayload);
-            paymentEventRepository.save(paymentEvent);
+        PaymentEvent paymentEvent = new PaymentEvent();
+        paymentEvent.setPaymentId(payment.getId());
+        paymentEvent.setRazorpayEventId(razorpayPaymentId);
+        paymentEvent.setEventType(eventType);
+        paymentEvent.setPayload(rawPayload);
+        paymentEventRepository.save(paymentEvent);
 
-            auditService.logInventoryDecremented(orderItem.getTierId().toString(), orderItem.getQuantity());
-            auditService.logPaymentSuccess(orderId.toString(), payment.getId().toString(), amount.toString());
-            auditService.logOrderStatusUpdated(orderId.toString(), OrderStatus.PENDING.name(), OrderStatus.CONFIRMED.name());
-        } else {
-            auditService.logOversellDetected(orderId.toString(), orderItem.getTierId().toString());
-
-            Payment payment = new Payment();
-            payment.setOrderId(orderId);
-            payment.setRazorpayPaymentId(razorpayPaymentId);
-            payment.setAmount(amount);
-            payment.setCurrency(currency);
-            payment.setStatus(PaymentStatus.FAILED);
-            payment = paymentRepository.save(payment);
-
-            order.setStatus(OrderStatus.FAILED);
-            orderRepository.save(order);
-
-            PaymentEvent paymentEvent = new PaymentEvent();
-            paymentEvent.setPaymentId(payment.getId());
-            paymentEvent.setRazorpayEventId(razorpayPaymentId);
-            paymentEvent.setEventType(eventType);
-            paymentEvent.setPayload(rawPayload);
-            paymentEventRepository.save(paymentEvent);
-
-            auditService.logPaymentFailed(orderId.toString(), "Concurrent oversell detected");
-            auditService.logOrderStatusUpdated(orderId.toString(), OrderStatus.PENDING.name(), OrderStatus.FAILED.name());
-        }
+        auditService.logPaymentSuccess(orderId.toString(), payment.getId().toString(), amount.toString());
+        auditService.logOrderStatusUpdated(orderId.toString(), OrderStatus.PENDING.name(), OrderStatus.CONFIRMED.name());
     }
 
     private void handlePaymentFailure(JsonNode root, String razorpayPaymentId, String rawPayload, String eventType) {
         JsonNode paymentEntity = root.path("payload").path("payment").path("entity");
         JsonNode notes = paymentEntity.path("notes");
 
-        UUID orderId = UUID.fromString(notes.path("orderId").asText());
-
-        Order order = orderRepository.findById(orderId)
-                .orElseThrow(() -> new OrderNotFoundException("Order not found: " + orderId));
-
-        if (order.getStatus() != OrderStatus.PENDING) {
-            return;
+        String orderIdStr = notes.path("orderId").asText("");
+        if (orderIdStr.isEmpty()) {
+            throw new RuntimeException("Missing orderId in webhook notes");
         }
+        UUID orderId = UUID.fromString(orderIdStr);
 
+        String razorpayOrderId = paymentEntity.path("order_id").asText("");
         long amountInPaise = paymentEntity.path("amount").asLong(0);
         BigDecimal amount = BigDecimal.valueOf(amountInPaise).divide(BigDecimal.valueOf(100));
         String currency = paymentEntity.path("currency").asText("INR").toUpperCase();
-        String errorDescription = paymentEntity.path("error_description").asText("Unknown error");
+        String errorDescription = paymentEntity.path("error_description").asText("Payment failed");
+
+        orderServiceClient.failOrder(orderId, errorDescription);
 
         Payment payment = new Payment();
         payment.setOrderId(orderId);
         payment.setRazorpayPaymentId(razorpayPaymentId);
+        payment.setRazorpayOrderId(razorpayOrderId);
         payment.setAmount(amount);
         payment.setCurrency(currency);
         payment.setStatus(PaymentStatus.FAILED);
         payment = paymentRepository.save(payment);
-
-        order.setStatus(OrderStatus.FAILED);
-        orderRepository.save(order);
 
         PaymentEvent paymentEvent = new PaymentEvent();
         paymentEvent.setPaymentId(payment.getId());
