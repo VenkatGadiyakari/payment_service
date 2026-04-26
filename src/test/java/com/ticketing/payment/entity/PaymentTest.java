@@ -22,13 +22,15 @@ class PaymentTest {
     void testAllArgsConstructor() {
         UUID orderId = UUID.randomUUID();
         String razorpayPaymentId = "pay_123456";
+        String razorpayOrderId = "order_123456";
         BigDecimal amount = BigDecimal.valueOf(100.50);
         String currency = "INR";
 
-        Payment payment = new Payment(orderId, razorpayPaymentId, amount, currency, PaymentStatus.SUCCEEDED);
+        Payment payment = new Payment(orderId, razorpayPaymentId, razorpayOrderId, amount, currency, PaymentStatus.SUCCEEDED);
 
         assertEquals(orderId, payment.getOrderId());
         assertEquals(razorpayPaymentId, payment.getRazorpayPaymentId());
+        assertEquals(razorpayOrderId, payment.getRazorpayOrderId());
         assertEquals(amount, payment.getAmount());
         assertEquals(currency, payment.getCurrency());
         assertEquals(PaymentStatus.SUCCEEDED, payment.getStatus());
@@ -40,11 +42,13 @@ class PaymentTest {
         UUID id = UUID.randomUUID();
         UUID orderId = UUID.randomUUID();
         String razorpayPaymentId = "pay_789012";
+        String razorpayOrderId = "order_789012";
         BigDecimal amount = BigDecimal.valueOf(250.75);
 
         payment.setId(id);
         payment.setOrderId(orderId);
         payment.setRazorpayPaymentId(razorpayPaymentId);
+        payment.setRazorpayOrderId(razorpayOrderId);
         payment.setAmount(amount);
         payment.setCurrency("INR");
         payment.setStatus(PaymentStatus.FAILED);
@@ -52,6 +56,7 @@ class PaymentTest {
         assertEquals(id, payment.getId());
         assertEquals(orderId, payment.getOrderId());
         assertEquals(razorpayPaymentId, payment.getRazorpayPaymentId());
+        assertEquals(razorpayOrderId, payment.getRazorpayOrderId());
         assertEquals(amount, payment.getAmount());
         assertEquals("INR", payment.getCurrency());
         assertEquals(PaymentStatus.FAILED, payment.getStatus());

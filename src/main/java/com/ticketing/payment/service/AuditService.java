@@ -14,11 +14,6 @@ public class AuditService {
                     orderId, tierId, quantity);
     }
 
-    public void logPaymentLinkCreated(String orderId, String paymentLinkId) {
-        logger.info("AUDIT: Razorpay payment link created - orderId: {}, paymentLinkId: {}",
-                    orderId, maskSensitiveData(paymentLinkId));
-    }
-
     public void logWebhookReceived(String eventId, String eventType) {
         logger.info("AUDIT: Webhook received - eventId: {}, eventType: {}", eventId, eventType);
     }

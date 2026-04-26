@@ -58,6 +58,14 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalStateException(IllegalStateException ex) {
+        String traceId = MDC.get("traceId");
+        logger.error("Invalid order state", ex);
+        ErrorResponse error = new ErrorResponse("ORDER_STATE_CONFLICT", ex.getMessage(), traceId);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidationException(MethodArgumentNotValidException ex) {
         String traceId = MDC.get("traceId");

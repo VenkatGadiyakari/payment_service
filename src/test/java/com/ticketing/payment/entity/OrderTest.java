@@ -18,38 +18,21 @@ class OrderTest {
     }
 
     @Test
-    void testAllArgsConstructor() {
-        UUID buyerId = UUID.randomUUID();
-        BigDecimal totalAmount = BigDecimal.valueOf(500.00);
-        String razorpayPaymentLinkId = "plink_test_123456";
-
-        Order order = new Order(buyerId, OrderStatus.CONFIRMED, totalAmount, razorpayPaymentLinkId);
-
-        assertEquals(buyerId, order.getBuyerId());
-        assertEquals(OrderStatus.CONFIRMED, order.getStatus());
-        assertEquals(totalAmount, order.getTotalAmount());
-        assertEquals(razorpayPaymentLinkId, order.getRazorpayPaymentLinkId());
-    }
-
-    @Test
     void testSettersAndGetters() {
         Order order = new Order();
         UUID id = UUID.randomUUID();
         UUID buyerId = UUID.randomUUID();
         BigDecimal totalAmount = BigDecimal.valueOf(750.50);
-        String razorpayPaymentLinkId = "plink_test_789012";
 
         order.setId(id);
         order.setBuyerId(buyerId);
         order.setStatus(OrderStatus.FAILED);
         order.setTotalAmount(totalAmount);
-        order.setRazorpayPaymentLinkId(razorpayPaymentLinkId);
 
         assertEquals(id, order.getId());
         assertEquals(buyerId, order.getBuyerId());
         assertEquals(OrderStatus.FAILED, order.getStatus());
         assertEquals(totalAmount, order.getTotalAmount());
-        assertEquals(razorpayPaymentLinkId, order.getRazorpayPaymentLinkId());
     }
 
     @Test
